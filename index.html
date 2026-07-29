@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A simple GPX route library with maps and elevation profiles.">
+  <title>GPX routes</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar" aria-labelledby="routes-heading">
+      <header class="sidebar-header">
+        <h1 id="routes-heading">GPX routes</h1>
+        <p id="route-count" class="muted">Loading…</p>
+      </header>
+
+      <div id="route-list" class="route-list" aria-live="polite"></div>
+      <p id="list-message" class="empty-message" hidden></p>
+    </aside>
+
+    <section class="viewer" aria-live="polite">
+      <header class="viewer-header">
+        <div>
+          <h2 id="track-title">Choose a route</h2>
+          <p id="track-meta" class="muted">Select a GPX file from the list.</p>
+        </div>
+        <a id="download-link" class="download-link" href="#" download hidden>Download GPX</a>
+      </header>
+
+      <div class="map-wrap">
+        <div id="map" aria-label="Route map"></div>
+        <div id="map-status" class="map-status">Choose a route to display it.</div>
+      </div>
+
+      <section class="profile-card" aria-labelledby="profile-heading">
+        <div class="profile-header">
+          <h3 id="profile-heading">Elevation profile</h3>
+          <p id="profile-summary" class="muted">No route selected.</p>
+        </div>
+        <div id="elevation-profile" class="profile" role="img" aria-label="Elevation profile"></div>
+      </section>
+    </section>
+  </main>
+
+  <noscript>This page needs JavaScript to load and display GPX files.</noscript>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="./app.js"></script>
+</body>
+</html>
