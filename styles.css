@@ -10,6 +10,10 @@
   --accent-soft: #e9f2fa;
   --danger: #9f2d20;
   --shadow: 0 1px 3px rgba(23, 32, 42, 0.08);
+  --descent: #2f9e44;
+  --flat: #7a8288;
+  --climb: #e0a800;
+  --strong-climb: #d62828;
 }
 
 * {
@@ -191,6 +195,41 @@ h3 {
   color: var(--danger);
 }
 
+.map-legend {
+  position: absolute;
+  z-index: 500;
+  right: 12px;
+  bottom: 24px;
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 0.78rem;
+  pointer-events: none;
+}
+
+.map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend-line {
+  display: inline-block;
+  width: 22px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.legend-line.descent { background: var(--descent); }
+.legend-line.flat { background: var(--flat); }
+.legend-line.climb { background: var(--climb); }
+.legend-line.strong-climb { background: var(--strong-climb); }
+
 .profile-card {
   background: var(--panel);
   border-top: 1px solid var(--border);
@@ -252,10 +291,18 @@ h3 {
   fill: rgba(23, 105, 170, 0.12);
 }
 
-.profile-line {
+.profile-line-base {
   fill: none;
-  stroke: var(--accent);
+  stroke: var(--flat);
   stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.profile-terrain-line {
+  fill: none;
+  stroke-width: 3;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
@@ -346,4 +393,11 @@ noscript {
     margin-top: 5px;
     text-align: left;
   }
+
+  .map-legend {
+    right: 8px;
+    bottom: 20px;
+    font-size: 0.72rem;
+  }
 }
+

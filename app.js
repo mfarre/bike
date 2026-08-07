@@ -3,6 +3,21 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const DEFAULT_VIEW = { center: [46.8, 8.25], zoom: 8 };
 
+const TERRAIN = {
+  descent: { label: "Descent", color: "#2f9e44" },
+  flat: { label: "Flat / rolling", color: "#7a8288" },
+  climb: { label: "Climb", color: "#e0a800" },
+  strongClimb: { label: "Strong climb", color: "#d62828" },
+  unknown: { label: "No elevation", color: "#1769aa" },
+};
+
+const SLOPE = {
+  smoothingWindowKm: 0.12,
+  descentBelowPct: -2,
+  climbAbovePct: 2,
+  strongClimbAbovePct: 10,
+};
+
 const elements = {
   routeList: document.getElementById("route-list"),
   routeCount: document.getElementById("route-count"),
@@ -209,6 +224,8 @@ function parseGpx(gpxText) {
         totalDistanceKm += haversineKm(previousPoint, point);
       }
 
+      point.distanceKm = totalDistanceKm;
+
       if (Number.isFinite(point.elevation)) {
         if (Number.isFinite(previousElevation)) {
           const climb = point.elevation - previousElevation;
@@ -217,13 +234,15 @@ function parseGpx(gpxText) {
           }
         }
         previousElevation = point.elevation;
-        profilePoints.push({ ...point, distanceKm: totalDistanceKm });
+        profilePoints.push(point);
       }
 
       previousPoint = point;
       pointCount += 1;
     }
   }
+
+  annotateTerrain(profilePoints);
 
   return {
     segments,
@@ -232,6 +251,77 @@ function parseGpx(gpxText) {
     elevationGainM,
     pointCount,
   };
+}
+
+function annotateTerrain(points) {
+  if (points.length < 2) {
+    return;
+  }
+
+  const halfWindow = SLOPE.smoothingWindowKm / 2;
+  let left = 0;
+  let right = 0;
+
+  for (let index = 0; index < points.length; index += 1) {
+    const centerDistance = points[index].distanceKm;
+
+    while (left < index && points[left + 1].distanceKm <= centerDistance - halfWindow) {
+      left += 1;
+    }
+
+    right = Math.max(right, index);
+    while (right + 1 < points.length && points[right].distanceKm < centerDistance + halfWindow) {
+      right += 1;
+    }
+
+    let before = left;
+    let after = right;
+
+    if (before === after) {
+      if (before > 0) before -= 1;
+      if (after + 1 < points.length) after += 1;
+    }
+
+    const horizontalM = (points[after].distanceKm - points[before].distanceKm) * 1000;
+    if (horizontalM < 5) {
+      points[index].slopePct = 0;
+      points[index].terrainCategory = "flat";
+      continue;
+    }
+
+    const slopePct = ((points[after].elevation - points[before].elevation) / horizontalM) * 100;
+    points[index].slopePct = slopePct;
+    points[index].terrainCategory = terrainCategory(slopePct);
+  }
+}
+
+function terrainCategory(slopePct) {
+  if (slopePct < SLOPE.descentBelowPct) return "descent";
+  if (slopePct > SLOPE.strongClimbAbovePct) return "strongClimb";
+  if (slopePct > SLOPE.climbAbovePct) return "climb";
+  return "flat";
+}
+
+function terrainRuns(segment) {
+  if (segment.length < 2) return [];
+
+  const runs = [];
+  let current = null;
+
+  for (let index = 1; index < segment.length; index += 1) {
+    const first = segment[index - 1];
+    const second = segment[index];
+    const category = second.terrainCategory ?? first.terrainCategory ?? "unknown";
+
+    if (!current || current.category !== category) {
+      current = { category, points: [first, second] };
+      runs.push(current);
+    } else {
+      current.points.push(second);
+    }
+  }
+
+  return runs;
 }
 
 function parsePoint(node) {
@@ -256,12 +346,28 @@ function drawRoute(parsed) {
   clearRoute();
 
   for (const segment of parsed.segments) {
-    const latLngs = segment.map((point) => [point.latitude, point.longitude]);
-    L.polyline(latLngs, {
-      color: "#1769aa",
-      weight: 4,
-      opacity: 0.92,
-    }).addTo(state.routeLayers);
+    for (const run of terrainRuns(segment)) {
+      const latLngs = run.points.map((point) => [point.latitude, point.longitude]);
+      const style = TERRAIN[run.category] ?? TERRAIN.unknown;
+      const slopes = run.points.map((point) => point.slopePct).filter(Number.isFinite);
+      const averageSlope = slopes.length ? slopes.reduce((sum, value) => sum + value, 0) / slopes.length : null;
+
+      const line = L.polyline(latLngs, {
+        color: style.color,
+        weight: run.category === "strongClimb" ? 6 : 5,
+        opacity: 0.94,
+        lineCap: "round",
+        lineJoin: "round",
+      });
+
+      if (averageSlope !== null) {
+        line.bindTooltip(`${style.label} · ${averageSlope.toFixed(1)}%`, { sticky: true });
+      } else {
+        line.bindTooltip(style.label, { sticky: true });
+      }
+
+      line.addTo(state.routeLayers);
+    }
   }
 
   const firstPoint = parsed.segments[0][0];
@@ -377,7 +483,19 @@ function drawElevationProfile(points) {
 
   const areaPath = `${linePath} L ${x(maxDistance).toFixed(2)} ${(margin.top + plotHeight).toFixed(2)} L ${margin.left} ${(margin.top + plotHeight).toFixed(2)} Z`;
   svg.append(svgElement("path", { class: "profile-area", d: areaPath }));
-  svg.append(svgElement("path", { class: "profile-line", d: linePath }));
+  svg.append(svgElement("path", { class: "profile-line-base", d: linePath }));
+
+  for (const run of terrainRuns(chartPoints)) {
+    const path = run.points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.distanceKm).toFixed(2)} ${y(point.elevation).toFixed(2)}`)
+      .join(" ");
+    const style = TERRAIN[run.category] ?? TERRAIN.unknown;
+    svg.append(svgElement("path", {
+      class: "profile-terrain-line",
+      d: path,
+      stroke: style.color,
+    }));
+  }
 
   const hoverLine = svgElement("line", {
     class: "profile-hover-line",
@@ -392,7 +510,7 @@ function drawElevationProfile(points) {
   });
   const tooltipBackground = svgElement("rect", {
     class: "profile-tooltip-bg",
-    width: 132,
+    width: 176,
     height: 28,
     rx: 5,
     hidden: "",
@@ -432,13 +550,13 @@ function drawElevationProfile(points) {
     hoverDot.setAttribute("cx", pointX);
     hoverDot.setAttribute("cy", pointY);
 
-    const tooltipX = clamp(pointX, margin.left + 66, width - margin.right - 66);
+    const tooltipX = clamp(pointX, margin.left + 88, width - margin.right - 88);
     const tooltipY = clamp(pointY - 39, margin.top, margin.top + plotHeight - 28);
-    tooltipBackground.setAttribute("x", tooltipX - 66);
+    tooltipBackground.setAttribute("x", tooltipX - 88);
     tooltipBackground.setAttribute("y", tooltipY);
     tooltipText.setAttribute("x", tooltipX);
     tooltipText.setAttribute("y", tooltipY + 19);
-    tooltipText.textContent = `${point.distanceKm.toFixed(1)} km · ${Math.round(point.elevation)} m`;
+    tooltipText.textContent = `${point.distanceKm.toFixed(1)} km · ${Math.round(point.elevation)} m · ${Number.isFinite(point.slopePct) ? `${point.slopePct.toFixed(1)}%` : "—"}`;
 
     showHoverPoint(point);
   });
